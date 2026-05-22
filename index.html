@@ -251,7 +251,43 @@
         .item-del { width: 30px; height: 30px; border: 1px solid var(--red-dim); background: var(--red-dim); color: var(--red); border-radius: 8px; cursor: pointer; font-size: 16px; transition: background 0.15s, transform 0.15s; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .item-del:hover { background: rgba(224,82,82,0.22); transform: scale(1.1); }
 
-        /* ── BOTÃO MIC ── */
+        /* ── ABAS DE CLIENTE ── */
+        .abas-clientes { display: flex; gap: 6px; padding: 0 0 14px 0; overflow-x: auto; scrollbar-width: none; align-items: center; }
+        .abas-clientes::-webkit-scrollbar { display: none; }
+        .aba-btn {
+            display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+            padding: 7px 14px; border-radius: var(--r-md);
+            border: 1px solid var(--border); background: var(--surface-2);
+            color: var(--text-2); font-family: var(--font-mono); font-size: 11px;
+            font-weight: 700; cursor: pointer; letter-spacing: 0.03em;
+            transition: background 0.15s, border-color 0.15s, color 0.15s;
+        }
+        .aba-btn:hover { background: var(--surface-3); border-color: var(--border-hi); color: var(--text-1); }
+        .aba-btn.ativa { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+        .aba-badge { font-size: 10px; background: var(--surface-3); color: var(--text-3); padding: 1px 5px; border-radius: 4px; font-weight: 400; }
+        .aba-btn.ativa .aba-badge { background: rgba(78,203,122,0.2); color: var(--accent); }
+        .aba-fechar { margin-left: 2px; opacity: 0.45; font-size: 13px; line-height: 1; transition: opacity 0.15s; padding: 0 2px; background: none; border: none; color: inherit; cursor: pointer; }
+        .aba-fechar:hover { opacity: 1; }
+        .aba-nova {
+            flex-shrink: 0; width: 32px; height: 32px; border-radius: var(--r-sm);
+            border: 1px dashed var(--border); background: transparent; color: var(--text-3);
+            font-size: 18px; cursor: pointer; transition: border-color 0.15s, color 0.15s;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .aba-nova:hover { border-color: var(--accent); color: var(--accent); }
+
+        /* ── TROCO RÁPIDO ── */
+        .troco-rapido { display: flex; gap: 4px; margin-top: 8px; flex-wrap: nowrap; }
+        .btn-nota {
+            flex: 1; min-width: 0; height: 36px; border-radius: var(--r-sm);
+            border: 1px solid var(--border); background: var(--surface-2);
+            color: var(--text-2); font-family: var(--font-mono); font-size: 11px;
+            font-weight: 700; cursor: pointer; transition: background 0.15s, border-color 0.15s, transform 0.12s, color 0.15s;
+            white-space: nowrap; padding: 0;
+        }
+        .btn-nota:hover { background: var(--surface-3); border-color: var(--border-hi); color: var(--text-1); }
+        .btn-nota:active { transform: scale(0.91); }
+        .btn-nota.ativo { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
         .btn-mic {
             width: 58px; flex-shrink: 0; background: var(--surface-3); color: var(--text-2);
             border: 1px solid var(--border); border-radius: var(--r-md); font-size: 22px;
@@ -377,6 +413,8 @@
         <div class="brand-divider"></div>
     </div>
 
+    <div class="abas-clientes" id="abasClientes"></div>
+
     <div class="card">
         <div class="card-label">Novo Item</div>
         <div class="input-group">
@@ -415,6 +453,7 @@
                 <span class="input-prefix">R$</span>
                 <input type="number" id="valorPago" oninput="calcularTroco()" placeholder="Valor recebido" style="font-size:20px;height:54px;">
             </div>
+            <div class="troco-rapido" id="trocoRapido"></div>
         </div>
 
         <div id="detalheTroco" class="troco-box">
@@ -523,14 +562,21 @@
     }
 
     /* ── CORE ── */
-    const CHAVE_DB      = 'bom_granel_v12';
-    const CHAVE_CARRINHO = 'bom_granel_carrinho_v1';
-    let _rawCarrinho    = JSON.parse(localStorage.getItem(CHAVE_CARRINHO)) || [];
-    let itensVendaAtual = _rawCarrinho.map(item => typeof item === 'number' ? {val: item, nome: ''} : item);
-    let bancoDeDados    = JSON.parse(localStorage.getItem(CHAVE_DB)) || [];
+    const CHAVE_DB       = 'bom_granel_v12';
+    const CHAVE_CARRINHOS = 'bom_granel_carrinhos_v2';
+    let bancoDeDados     = JSON.parse(localStorage.getItem(CHAVE_DB)) || [];
+
+    // Multi-carrinho
+    let _rawCarrinhos = JSON.parse(localStorage.getItem(CHAVE_CARRINHOS));
+    let carrinhos = _rawCarrinhos
+        ? _rawCarrinhos.map(c => ({ id: c.id, items: c.items.map(i => typeof i === 'number' ? {val:i,nome:''} : i) }))
+        : [{ id: 1, items: [] }];
+    let carrinhoAtivo = 0;
+
+    function itens() { return carrinhos[carrinhoAtivo].items; }
 
     function salvarCarrinho() {
-        try { localStorage.setItem(CHAVE_CARRINHO, JSON.stringify(itensVendaAtual)); } catch(e) {}
+        try { localStorage.setItem(CHAVE_CARRINHOS, JSON.stringify(carrinhos)); } catch(e) {}
     }
 
     function toggleMenu() {
@@ -571,7 +617,7 @@
             setTimeout(() => input.style.borderColor = '', 600);
             return;
         }
-        itensVendaAtual.push({val, nome: ''});
+        itens().push({val, nome: ''});
         salvarCarrinho();
         input.value = ''; input.focus();
         renderVendaAtual();
@@ -581,13 +627,14 @@
         const lista = document.getElementById('vendaAtual');
         const qtdEl = document.getElementById('qtdItensCarrinho');
         
-        qtdEl.textContent = itensVendaAtual.length;
+        const lista_ = itens();
+        qtdEl.textContent = lista_.length;
 
-        if (itensVendaAtual.length === 0) {
+        if (lista_.length === 0) {
             lista.innerHTML = '<div class="item-empty">Nenhum item adicionado</div>';
         } else {
             lista.innerHTML = '';
-            itensVendaAtual.forEach((item, i) => {
+            lista_.forEach((item, i) => {
                 const val  = typeof item === 'number' ? item : item.val;
                 const nome = typeof item === 'object' && item.nome ? item.nome : '';
                 const div  = document.createElement('div');
@@ -600,17 +647,20 @@
                 lista.appendChild(div);
             });
         }
-        const soma = itensVendaAtual.reduce((a, b) => a + (typeof b === 'number' ? b : b.val), 0);
+        const soma = lista_.reduce((a, b) => a + (typeof b === 'number' ? b : b.val), 0);
         const el = document.getElementById('totalVenda');
         el.innerHTML = `R$&nbsp;${soma.toFixed(2).replace('.',',')}`;
         el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump');
         calcularTroco();
+        gerarBotoesNota(soma);
+        renderTabs();
     }
 
-    function removerItem(i) { itensVendaAtual.splice(i,1); salvarCarrinho(); renderVendaAtual(); }
+    function removerItem(i) { itens().splice(i,1); salvarCarrinho(); renderVendaAtual(); }
 
     function calcularTroco() {
-        const soma  = parseFloat(itensVendaAtual.reduce((a, b) => a + (typeof b === 'number' ? b : b.val), 0).toFixed(2));
+        const soma  = parseFloat(itens().reduce((a, b) => a + (typeof b === 'number' ? b : b.val), 0).toFixed(2));
+        gerarBotoesNota(soma);
         const pago  = parseFloat(document.getElementById('valorPago').value) || 0;
         const troco = parseFloat((pago-soma).toFixed(2));
         const box   = document.getElementById('detalheTroco');
@@ -629,19 +679,17 @@
     }
 
     function finalizarVenda() {
-        if (itensVendaAtual.length === 0) return;
+        if (itens().length === 0) return;
         const agora = new Date();
-        const soma  = itensVendaAtual.reduce((a, b) => a + (typeof b === 'number' ? b : b.val), 0);
-        bancoDeDados.unshift({ id:Date.now(), data:agora.toLocaleDateString('pt-BR'), mes:(agora.getMonth()+1).toString().padStart(2,'0')+"/"+agora.getFullYear(), hora:agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}), total:soma, itens:[...itensVendaAtual] });
+        const lista_ = itens();
+        const soma  = lista_.reduce((a, b) => a + (typeof b === 'number' ? b : b.val), 0);
+        bancoDeDados.unshift({ id:Date.now(), data:agora.toLocaleDateString('pt-BR'), mes:(agora.getMonth()+1).toString().padStart(2,'0')+"/"+agora.getFullYear(), hora:agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}), total:soma, itens:[...lista_] });
         localStorage.setItem('bom_granel_v12', JSON.stringify(bancoDeDados));
-        itensVendaAtual = [];
+        carrinhos[carrinhoAtivo].items = [];
         salvarCarrinho();
         document.getElementById('valorPago').value = '';
-        
-        // Fecha o carrinho após finalizar
         document.getElementById('vendaAtual').classList.remove('open');
         document.getElementById('cartToggleIcon').classList.remove('open');
-
         renderVendaAtual(); atualizarInterface();
         const btn=document.querySelector('.btn-fim'), rect=btn.getBoundingClientRect();
         spawnBurst(rect.left+rect.width/2, rect.top+rect.height/2);
@@ -733,12 +781,61 @@
     }
 
     setInterval(atualizarDataHora,30000);
-    atualizarDataHora(); renderVendaAtual(); atualizarInterface();
+    atualizarDataHora(); renderVendaAtual(); renderTabs(); atualizarInterface();
     if (document.documentElement.classList.contains('tema-claro')) {
         document.getElementById('btnTema').textContent = '🌙';
     }
     document.getElementById('valorInput').addEventListener('keypress',e=>{if(e.key==='Enter')adicionarItem();});
     document.getElementById('valorPago').addEventListener('keypress',e=>{if(e.key==='Enter')finalizarVenda();});
+
+    /* ── ABAS DE CLIENTE ── */
+    let _proximoIdCarrinho = carrinhos.length + 1;
+
+    function renderTabs() {
+        const container = document.getElementById('abasClientes');
+        if (!container) return;
+        container.innerHTML = carrinhos.map((c, i) => {
+            const qtd = c.items.length;
+            const ativa = i === carrinhoAtivo ? ' ativa' : '';
+            const fechar = carrinhos.length > 1
+                ? `<button class="aba-fechar" onclick="fecharCarrinho(event,${i})" title="Fechar">×</button>`
+                : '';
+            return `<button class="aba-btn${ativa}" onclick="trocarCarrinho(${i})">
+                Cl.${c.id}${qtd > 0 ? `<span class="aba-badge">${qtd}</span>` : ''}${fechar}
+            </button>`;
+        }).join('') + `<button class="aba-nova" onclick="adicionarCarrinho()" title="Novo cliente">+</button>`;
+    }
+
+    function adicionarCarrinho() {
+        carrinhos.push({ id: _proximoIdCarrinho++, items: [] });
+        carrinhoAtivo = carrinhos.length - 1;
+        salvarCarrinho();
+        renderTabs();
+        renderVendaAtual();
+        document.getElementById('valorPago').value = '';
+        showToast(`✦ Cliente ${carrinhos[carrinhoAtivo].id} adicionado`);
+    }
+
+    function trocarCarrinho(i) {
+        if (i === carrinhoAtivo) return;
+        carrinhoAtivo = i;
+        renderTabs();
+        renderVendaAtual();
+        document.getElementById('valorPago').value = '';
+    }
+
+    function fecharCarrinho(e, i) {
+        e.stopPropagation();
+        if (carrinhos.length === 1) return;
+        const id = carrinhos[i].id;
+        carrinhos.splice(i, 1);
+        if (carrinhoAtivo >= carrinhos.length) carrinhoAtivo = carrinhos.length - 1;
+        salvarCarrinho();
+        renderTabs();
+        renderVendaAtual();
+        document.getElementById('valorPago').value = '';
+        showToast(`✦ Cliente ${id} removido`);
+    }
 
     /* ── VOZ ── */
     let recognizing = false;
@@ -766,6 +863,21 @@
         return r;
     }
 
+    function gerarBotoesNota(total) {
+        const container = document.getElementById('trocoRapido');
+        if (!container) return;
+        const ativas = [5, 10, 20, 50, 100, 200];
+        const pagoAtual = parseFloat(document.getElementById('valorPago').value) || 0;
+        container.innerHTML = ativas.map(n =>
+            `<button class="btn-nota${pagoAtual === n ? ' ativo' : ''}" onclick="setPago(${n})">R$&nbsp;${n}</button>`
+        ).join('');
+    }
+
+    function setPago(valor) {
+        document.getElementById('valorPago').value = valor;
+        calcularTroco();
+    }
+
     function toggleVoz() {
         if (recognizing) {
             if (recognition) recognition.stop();
@@ -778,7 +890,6 @@
             recognition.start();
             setMicState(true);
         } catch(e) {
-            // já estava iniciado
             recognition = initRecognition();
             recognition.start();
             setMicState(true);
@@ -851,7 +962,7 @@
             showToast(`🎤 Não entendi: "${texto}". Tente "café 10 reais"`);
             return;
         }
-        novosItens.forEach(item => itensVendaAtual.push(item));
+        novosItens.forEach(item => itens().push(item));
         salvarCarrinho();
         renderVendaAtual();
         // Abre o carrinho automaticamente
