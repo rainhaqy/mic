@@ -449,9 +449,15 @@
         </div>
         
         <div style="margin-top:4px;">
-            <div class="input-wrapper">
-                <span class="input-prefix">R$</span>
-                <input type="number" id="valorPago" oninput="calcularTroco()" placeholder="Valor recebido" style="font-size:20px;height:54px;">
+            <div style="display:flex;gap:8px;align-items:stretch;">
+                <div class="input-wrapper" style="flex:1;">
+                    <span class="input-prefix">R$</span>
+                    <input type="number" id="valorPago" oninput="calcularTroco()" placeholder="Valor recebido" style="font-size:20px;height:54px;">
+                </div>
+                <button class="btn-mic" id="btnMicPago" onclick="toggleVozPago()" title="Falar valor recebido">🎤</button>
+            </div>
+            <div id="vozStatusPago" style="display:none;margin-top:8px;padding:8px 14px;background:rgba(224,82,82,0.08);border:1px solid rgba(224,82,82,0.25);border-radius:var(--r-sm);font-size:12px;color:var(--red);font-family:var(--font-mono);text-align:center;">
+                🎤 Fale o valor... ex: "cinquenta reais" ou "42,50"
             </div>
             <div class="troco-rapido" id="trocoRapido"></div>
         </div>
@@ -505,7 +511,13 @@
         <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px;">
             <input type="text" id="descGasto" placeholder="O que você pagou?" style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-md);padding:16px;color:var(--text-1);font-size:16px;outline:none;font-family:var(--font-sans);">
             <input type="number" id="valorGasto" placeholder="Valor R$" step="0.01" inputmode="decimal" style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-md);padding:16px;color:var(--text-1);font-size:16px;outline:none;font-family:var(--font-sans);">
-            <button onclick="adicionarGasto()" style="background:#e05252;border:none;border-radius:var(--r-md);padding:16px;color:white;font-weight:700;text-transform:uppercase;letter-spacing:1px;cursor:pointer;font-family:var(--font-sans);font-size:13px;">Salvar Gasto</button>
+            <div style="display:flex;gap:10px;">
+                <button id="btnMicGasto" onclick="toggleVozGasto()" class="btn-mic" title="Falar gasto" style="height:54px;flex-shrink:0;">🎤</button>
+                <button onclick="adicionarGasto()" style="flex:1;background:#e05252;border:none;border-radius:var(--r-md);padding:16px;color:white;font-weight:700;text-transform:uppercase;letter-spacing:1px;cursor:pointer;font-family:var(--font-sans);font-size:13px;">Salvar Gasto</button>
+            </div>
+            <div id="vozStatusGasto" style="display:none;padding:10px 14px;background:rgba(224,82,82,0.08);border:1px solid rgba(224,82,82,0.25);border-radius:var(--r-sm);font-size:12px;color:var(--red);font-family:var(--font-mono);text-align:center;">
+                🎤 Fale o gasto... ex: "aluguel 500 reais" ou "energia 150"
+            </div>
         </div>
         <div style="font-size:11px;color:var(--text-2);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">Últimos Lançamentos</div>
         <div id="listaGastos" style="max-height:350px;overflow-y:auto;padding-right:4px;"></div>
@@ -1188,6 +1200,80 @@ self.addEventListener('fetch', e => {
     }
 
     document.getElementById('valorGasto').addEventListener('keypress', e => { if (e.key === 'Enter') adicionarGasto(); });
+
+    /* ── VOZ GASTOS ── */
+    let recognizingGasto = false;
+    let recognitionGasto = null;
+
+    function toggleVozGasto() {
+        if (recognizingGasto) {
+            if (recognitionGasto) recognitionGasto.stop();
+            setMicStateGasto(false);
+            return;
+        }
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SR) { showToast('⚠ Voz não suportada neste navegador'); return; }
+        recognitionGasto = new SR();
+        recognitionGasto.lang = 'pt-BR';
+        recognitionGasto.continuous = false;
+        recognitionGasto.interimResults = false;
+        recognitionGasto.onresult = function(e) {
+            processarVozGasto(e.results[0][0].transcript);
+        };
+        recognitionGasto.onerror = function(e) {
+            setMicStateGasto(false);
+            if (e.error === 'no-speech') showToast('Nenhuma fala detectada');
+            else if (e.error === 'not-allowed') showToast('⚠ Permita o microfone');
+            else showToast('Erro: ' + e.error);
+        };
+        recognitionGasto.onend = function() { setMicStateGasto(false); };
+        recognitionGasto.start();
+        setMicStateGasto(true);
+    }
+
+    function setMicStateGasto(ativo) {
+        recognizingGasto = ativo;
+        const btn = document.getElementById('btnMicGasto');
+        const status = document.getElementById('vozStatusGasto');
+        if (btn) { btn.classList.toggle('escutando', ativo); btn.textContent = ativo ? '⏹' : '🎤'; }
+        if (status) status.style.display = ativo ? 'block' : 'none';
+    }
+
+    function processarVozGasto(texto) {
+        // Tenta extrair: DESCRIÇÃO + VALOR
+        // ex: "aluguel 500 reais", "energia elétrica 150,50", "fornecedor 1200"
+        texto = texto.toLowerCase().replace(/\s*(?:reais?|real|r\$)\s*$/i, '').trim();
+
+        let desc = '', valor = '';
+
+        // Padrão: texto + número
+        let m = texto.match(/^(.+?)\s+(\d+(?:[.,]\d{1,2})?)$/);
+        if (m) {
+            desc  = capitalizar(m[1].trim());
+            valor = m[2].replace(',', '.');
+        } else {
+            // Padrão: número + texto
+            m = texto.match(/^(\d+(?:[.,]\d{1,2})?)\s+(.+)$/);
+            if (m) {
+                valor = m[1].replace(',', '.');
+                desc  = capitalizar(m[2].trim());
+            } else {
+                // Só número
+                m = texto.match(/^(\d+(?:[.,]\d{1,2})?)$/);
+                if (m) { valor = m[1].replace(',', '.'); }
+            }
+        }
+
+        if (!valor) {
+            showToast(`🎤 Não entendi: "${texto}". Tente "aluguel 500 reais"`);
+            return;
+        }
+
+        if (desc) document.getElementById('descGasto').value = desc;
+        if (valor) document.getElementById('valorGasto').value = parseFloat(valor).toFixed(2);
+
+        showToast(`🎤 "${desc || 'Valor'}: R$ ${parseFloat(valor).toFixed(2).replace('.', ',')}"`);
+    }
 </script>
 </body>
 </html>
